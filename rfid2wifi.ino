@@ -34,13 +34,10 @@
 #include <EEPROM.h>
 #include "secrets.h"
 
-#define MANUF_ID        13          /* DIY DCC*/
-#define BOARD_TYPE      5           /* something for sv.init*/
+const char* ssid = SSID_RR;  //update the secrets.h file
+const char* password = PASS_RR; //update the secrets.h file
 
-const char* ssid = SSID_RR;
-const char* password = PASS_RR;
-
-IPAddress ipBroad(224,0,0,1);
+IPAddress ipBroad(224,0,0,1); 
 const int port = 1235;
 
 // Create an instance of the server
@@ -94,6 +91,9 @@ WiFiUDP g_udp;
 #define VER_LOW         0x01
 #define VER_HIGH        0X00
 
+#define BOARD_ADDR_LO   89
+#define BOARD_ADDR_HI   1
+
 #define NR_OF_PORTS     1
 #define UID_LEN         7
 
@@ -101,8 +101,8 @@ MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
 
 MFRC522::MIFARE_Key key;
 
-uint8_t ucBoardAddrHi = 1;  //board address high; always 1
-uint8_t ucBoardAddrLo = 88;  //board address low; default 88
+uint8_t ucBoardAddrHi = BOARD_ADDR_HI;  //board address high; always 1
+uint8_t ucBoardAddrLo = BOARD_ADDR_LO;  //board address low; default 89
 
 uint8_t ucAddrHiSen = 0;    //sensor address high
 uint8_t ucAddrLoSen = 1;    //sensor address low
@@ -114,7 +114,7 @@ void copyUid(byte *buffIn, byte *buffOut, byte bufferSize);
 void setMessageHeader(uint8_t *SendPacketSensor);
 uint8_t processXferMess(uint8_t *LnRecMsg, uint8_t *LnSendMsg);
 uint8_t lnCalcCheckSumm(uint8_t *cMessage, uint8_t cMesLen);
-uint8_t uiLnSendCheckSumIdx = 13;
+uint8_t uiLnSendCheckSumIdx = 13; //last byte is CHK_SUMM
 uint8_t uiLnSendLength = 14; //14 bytes
 uint8_t uiLnSendMsbIdx = 12;
 uint8_t uiStartChkSen;
@@ -141,8 +141,8 @@ void setup() {
     ucBoardAddrLo = EEPROM.read(ADDR_NODE_ID_L); //board address low
 
     if((ucBoardAddrHi == 0xFF) && (ucBoardAddrLo == 0xFF)){ //eeprom empty, first run 
-       ucBoardAddrHi = 1;
-       ucBoardAddrLo = 88;
+       ucBoardAddrHi = BOARD_ADDR_HI;
+       ucBoardAddrLo = BOARD_ADDR_LO;
 
        EEPROM.write(ADDR_NODE_ID_H, ucBoardAddrHi );
        EEPROM.write(ADDR_NODE_ID_L, ucBoardAddrLo);
