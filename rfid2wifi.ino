@@ -95,7 +95,9 @@ WiFiUDP g_udp;
 #define BOARD_ADDR_HI   1
 
 #define NR_OF_PORTS     1
+#define NR_OF_SVS       NR_OF_PORTS * 3 + 3
 #define UID_LEN         7
+#define NR_OF_EXT_SVS   100 + NR_OF_PORTS * 3
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
 
@@ -123,6 +125,9 @@ uint8_t oldUid[UID_LEN] = {0};
 
 uint8_t SendPacketSensor[16];
 
+boolean bSerialOk=false;
+
+
 
 #define _SERIAL_DEBUG  0
 
@@ -130,10 +135,25 @@ uint8_t SendPacketSensor[16];
  * Initialize.
  */
 void setup() {
-#if _SERIAL_DEBUG    
+  
+    uint32_t uiStartTimer;
+    uint16_t uiElapsedDelay;
+    uint16_t uiSerialOKDelay = 5000;
+    
     Serial.begin(115200); // Initialize serial communications with the PC
-    while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
-#endif
+    uiStartTimer = millis();
+    do{  //wait for the serial interface, but maximal 1 second.
+        uiElapsedDelay = millis() - uiStartTimer;
+    } while ((!Serial) && (uiElapsedDelay < uiSerialOKDelay));    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
+
+    if(Serial) { //serial interface ok
+       bSerialOk = true;
+       //Show some details of the loconet setup
+       Serial.println();
+       Serial.println();
+       Serial.println(F("***************************************************************************"));
+       Serial.println(F("RFID to WIFI Board"));
+    }
 
     EEPROM.begin(256);
         
@@ -175,37 +195,45 @@ void setup() {
   
     WiFi.begin(ssid, password);
   
-#if _SERIAL_DEBUG        
-    Serial.println("");
-#endif
+    if(bSerialOk){
+       Serial.println("");
+    }
+    
     while (WiFi.status() != WL_CONNECTED) {
       delay(500);
-#if _SERIAL_DEBUG    
-      Serial.print(".");
-#endif
-    }
-#if _SERIAL_DEBUG        
-    Serial.println("");
-    Serial.println("WiFi connected");
-#endif
-     
+      if(bSerialOk){
+         Serial.print(".");
+      }
+   }//while
+   
+   if(bSerialOk){
+      Serial.println("");
+      Serial.println("WiFi connected");
+   }
+
     // start UDP server
     g_udp.begin(port);
 
     setMessageHeader(SendPacketSensor);
     uiStartChkSen = SendPacketSensor[uiLnSendCheckSumIdx];
 
-#ifdef _SERIAL_DEBUG
+    if(bSerialOk){
         // Show some details of the loconet setup
-        Serial.print(F("Full sen addr: "));
-        Serial.print(uiAddrSenFull);
-        Serial.print(F(" Sensor AddrH: "));
+        Serial.print(F("Board address: "));
+        Serial.print(ucBoardAddrHi);
+        Serial.print(F(" - "));
+        Serial.println(ucBoardAddrLo);
+        Serial.print(F("Full sensor addr: "));
+        Serial.println(uiAddrSenFull);
+        Serial.print(F("Sensor AddrH: "));
         Serial.print(ucAddrHiSen);
         Serial.print(F(" Sensor AddrL: "));
         Serial.print(ucAddrLoSen);
         Serial.println();
-#endif
-}
+        Serial.println(F("***************************************************************************"));
+        Serial.println();
+    }
+} //setup
 
 /**
  * Main loop.
@@ -221,21 +249,14 @@ void loop() {
     // Look for new cards
   if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){
      if(!delaying){   //Avoid to many/to fast reads of the same tag
-#if _SERIAL_DEBUG  
-        // Show some details of the PICC (that is: the tag/card)
-        Serial.print(F("Card UID:"));
-        dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
-        Serial.println();
+      
+        if(bSerialOk){
+           // Show some details of the PICC (that is: the tag/card)
+           Serial.print(F("Card UID:"));
+           dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
+           Serial.println();
+        }
 
-        // Show some details of the loconet setup
-        Serial.print(F("Full sen addr: "));
-        Serial.print(uiAddrSenFull);
-        Serial.print(F("Sensor AddrH: "));
-        Serial.print(ucAddrHiSen);
-        Serial.print(F(" Sensor AddrL: "));
-        Serial.print(ucAddrLoSen);
-        Serial.println();
-#endif
         uiStartTime = millis();
         delaying = true;
 
@@ -297,6 +318,12 @@ void loop() {
         uint8_t msgLen = recMessage[1];
         uint8_t sendMessage[16]; 
      
+#ifdef _SERIAL_DEBUG
+        Serial.print(F("LN rec mess:"));
+        dump_byte_array(recMessage, recLen);
+        Serial.println();
+        Serial.println(recLen);
+#endif        
         //Change the board & sensor addresses. Changing the board address is working
         if(msgLen == 0x10){  //XFERmessage, check if it is for me. Used to change the address
            //svStatus = sv.processMessage(LnPacket);
@@ -398,13 +425,14 @@ uint8_t processXferMess(uint8_t LnRecMsg[16], uint8_t cOutBuf[16]){
                 }
                 cOutBuf[0x0B] = 0x7F;
                 cOutBuf[0x0E] = 0x7F;
-            } else if (ucPeerRSvIndex < (NR_OF_PORTS * 3 + 3)) { //nr_of_ports (1) * 3 register starting with the address 3
+            } else if ((ucPeerRSvIndex < NR_OF_SVS) /*|| 
+                       ((ucPeerRSvIndex > 100) && (ucPeerRSvIndex < NR_OF_EXT_SVS))*/) { //nr_of_ports (1) * 3 register starting with the address 3
                 if ((ucPeerRSvIndex % 3) != 0) { // do not change the type (leave it as IN)
-                    EEPROM.write(ADDR_USER_BASE + (ucPeerRSvIndex % 3), ucPeerRSvValue); //save the new value
+                    EEPROM.write(ucPeerRSvIndex, ucPeerRSvValue); //save the new value
                     EEPROM.commit();
                 }
                 cOutBuf[0x0B] = ucBoardAddrHi; 
-                ucTempData = EEPROM.read(ADDR_USER_BASE + (ucPeerRSvIndex % 3));
+                ucTempData = EEPROM.read(ucPeerRSvIndex);
                 if (ucTempData & 0x80) { //msb==1 => sent in PXCTL2
                    cOutBuf[0x0A] |= 0x08; //PXCTL2.3 = D8.7
                 }
@@ -413,22 +441,22 @@ uint8_t processXferMess(uint8_t LnRecMsg[16], uint8_t cOutBuf[16]){
             cOutBuf[0x0C] = 0;
             cOutBuf[0x0D] = 0;
         } //if (cLnBuffer[0x06] == CMD_WRITE)
-        
         if ((ucPeerRCommand == CMD_READ) || (ucPeerRCommand == 0)) { //read command. Answer to sender
             cOutBuf[0x0B] = 0x01;
 
-            ucTempData = EEPROM.read(ADDR_USER_BASE + (ucPeerRSvIndex-3));
+            ucTempData = EEPROM.read(ucPeerRSvIndex);
             if (ucTempData & 0x80) { //msb==1 => sent in PXCTL2
                 cOutBuf[0x0A] |= 0x02; //PXCTL2.1 = D6.7
             }
             cOutBuf[0x0C] = ucTempData & 0x7F;
 
-            ucTempData = EEPROM.read(ADDR_USER_BASE + (ucPeerRSvIndex-3) + 1);
+            ucTempData = EEPROM.read(ucPeerRSvIndex + 1);
             if (ucTempData & 0x80) { //msb==1 => sent in PXCTL2
                 cOutBuf[0x0A] |= 0x04; //PXCTL2.2 = D7.7
             }
             cOutBuf[0x0D] = ucTempData & 0x7F;
-            ucTempData = EEPROM.read(ADDR_USER_BASE + (ucPeerRSvIndex-3) + 2);
+
+            ucTempData = EEPROM.read(ucPeerRSvIndex + 2);
             if (ucTempData & 0x80) { //msb==1 => sent in PXCTL2
                 cOutBuf[0x0A] |= 0x08; //PXCTL2.3 = D8.7
             }
