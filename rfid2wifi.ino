@@ -39,6 +39,7 @@ const char* password = PASS_RR; //update the secrets.h file
 
 IPAddress ipBroad(224,0,0,1); 
 const int port = 1235;
+//const char STARS[] PROGMEM = "***************************************************************************";
 
 // Create an instance of the server
 // specify the port to listen on as an argument
@@ -152,6 +153,7 @@ void setup() {
        Serial.println();
        Serial.println();
        Serial.println(F("***************************************************************************"));
+//       Serial.println(FPSTR(STARS));
        Serial.println(F("RFID to WIFI Board"));
     }
 
@@ -277,11 +279,13 @@ void loop() {
 
         SendPacketSensor[uiLnSendCheckSumIdx] ^= SendPacketSensor[uiLnSendMsbIdx]; //calculate the checksumm
 
-#ifdef _SER_DEBUG
+#if _SER_DEBUG
+    if(bSerialOk){
         // Show some details of the PICC (that is: the tag/card)
         Serial.print(F("LN send mess:"));
         dump_byte_array(SendPacketSensor, uiLnSendLength);
         Serial.println();
+    } // if(bSerialOk){
 #endif
 
         g_udp.beginPacket(ipBroad, port);
@@ -318,11 +322,13 @@ void loop() {
         uint8_t msgLen = recMessage[1];
         uint8_t sendMessage[16]; 
      
-#ifdef _SERIAL_DEBUG
+#if _SERIAL_DEBUG
+    if(bSerialOk){
         Serial.print(F("LN rec mess:"));
         dump_byte_array(recMessage, recLen);
         Serial.println();
         Serial.println(recLen);
+    } //if(bSerial
 #endif        
         //Change the board & sensor addresses. Changing the board address is working
         if(msgLen == 0x10){  //XFERmessage, check if it is for me. Used to change the address
@@ -340,7 +346,8 @@ void loop() {
            ucAddrHiSen = (uiAddrSenFull >> 7) & 0x7F;
            ucAddrLoSen = uiAddrSenFull & 0x7F;
            setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
-#ifdef _SERIAL_DEBUG
+#if _SERIAL_DEBUG
+    if(bSerialOk){
         // Show some details of the loconet setup
         Serial.print(F("Changed address. Full sen addr: "));
         Serial.print(uiAddrSenFull);
@@ -349,6 +356,7 @@ void loop() {
         Serial.print(F(" Sensor AddrL: "));
         Serial.print(ucAddrLoSen);
         Serial.println();
+    } //if(bSerial
 #endif
         } //if(msgLen == 0x10)
       }//if( ((recMessage[2]
@@ -360,8 +368,10 @@ void loop() {
  */
 void dump_byte_array(byte *buffer, byte bufferSize) {
     for (byte i = 0; i < bufferSize; i++) {
-        Serial.print(buffer[i] < 0x10 ? " 0" : " ");
-        Serial.print(buffer[i], HEX);
+       if(bSerialOk){     
+          Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+          Serial.print(buffer[i], HEX);
+       } //if(bSerial
     }
 }
 
