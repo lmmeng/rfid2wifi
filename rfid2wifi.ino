@@ -33,13 +33,14 @@
 #include <WiFiUdp.h>
 #include <EEPROM.h>
 #include "secrets.h"
+#include "FS.h"
 
 const char* ssid = SSID_RR;  //update the secrets.h file
 const char* password = PASS_RR; //update the secrets.h file
 
 IPAddress ipBroad(224,0,0,1); 
 const int port = 1235;
-//const char STARS[] PROGMEM = "***************************************************************************";
+const char STARS[] PROGMEM = "***************************************************************************";
 
 // Create an instance of the server
 // specify the port to listen on as an argument
@@ -152,8 +153,8 @@ void setup() {
        //Show some details of the loconet setup
        Serial.println();
        Serial.println();
-       Serial.println(F("***************************************************************************"));
-//       Serial.println(FPSTR(STARS));
+//       Serial.println(F("***************************************************************************"));
+       Serial.println(FPSTR(STARS));
        Serial.println(F("RFID to WIFI Board"));
     }
 
@@ -232,7 +233,8 @@ void setup() {
         Serial.print(F(" Sensor AddrL: "));
         Serial.print(ucAddrLoSen);
         Serial.println();
-        Serial.println(F("***************************************************************************"));
+//        Serial.println(F("***************************************************************************"));
+        Serial.println(FPSTR(STARS));
         Serial.println();
     }
 } //setup
