@@ -32,7 +32,7 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 #include <EEPROM.h>
-#include "secrets.h"
+#include "secrets_lm.h"
 #include "FS.h"
 
 const char* ssid = SSID_RR;  //update the secrets.h file
@@ -44,7 +44,7 @@ const char STARS[] PROGMEM = "**************************************************
 
 // Create an instance of the server
 // specify the port to listen on as an argument
-WiFiServer server(port);
+//WiFiServer server(port);
 WiFiUDP g_udp;
 
 
@@ -129,9 +129,14 @@ uint8_t SendPacketSensor[16];
 
 boolean bSerialOk=false;
 
-
-
 #define _SERIAL_DEBUG  0
+
+WiFiServer server(80);
+
+File fIndexHtml;
+File fIp;
+
+IPAddress myIp;
 
 /**
  * Initialize.
@@ -153,7 +158,6 @@ void setup() {
        //Show some details of the loconet setup
        Serial.println();
        Serial.println();
-//       Serial.println(F("***************************************************************************"));
        Serial.println(FPSTR(STARS));
        Serial.println(F("RFID to WIFI Board"));
     }
@@ -176,14 +180,14 @@ void setup() {
        EEPROM.write(ADDR_USER_BASE, ucSenType);
 
        EEPROM.commit();
-    }
+    } //if((ucBoardAddrHi == 0xFF) 
 
     // Rocrail compatible addressing
     uiAddrSenFull = 256 * (EEPROM.read(ADDR_USER_BASE+2) & 0x0F) + 2 * EEPROM.read(ADDR_USER_BASE+1) +
                     (EEPROM.read(ADDR_USER_BASE+2) >> 5) + 1;
 
-    ucAddrHiSen = (uiAddrSenFull >> 7) & 0x7F;
-    ucAddrLoSen = uiAddrSenFull & 0x7F;        
+    calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
+
     ucSenType = EEPROM.read(ADDR_USER_BASE); //"sensor" type = in
 
     SPI.begin();        // Init SPI bus
@@ -214,6 +218,17 @@ void setup() {
       Serial.println("WiFi connected");
    }
 
+   // Print the IP address
+   if(bSerialOk){
+      Serial.println(WiFi.localIP());
+   }
+
+   // Start the server
+   server.begin();
+   if(bSerialOk){
+      Serial.println("Server started");
+   }
+
     // start UDP server
     g_udp.begin(port);
 
@@ -233,11 +248,16 @@ void setup() {
         Serial.print(F(" Sensor AddrL: "));
         Serial.print(ucAddrLoSen);
         Serial.println();
-//        Serial.println(F("***************************************************************************"));
         Serial.println(FPSTR(STARS));
         Serial.println();
     }
+
+    SPIFFS.begin();
+
+    myIp = WiFi.localIP();
 } //setup
+
+//#############################################################
 
 /**
  * Main loop.
@@ -313,7 +333,7 @@ void loop() {
     mfrc522.PCD_StopCrypto1();
   } //if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){    
 
-  // Check if a client has connected
+  // Check if a rocrail client has connected
   uint8_t recLen = g_udp.parsePacket();
   uint8_t recMessage[16]; 
   
@@ -345,8 +365,8 @@ void loop() {
            uiAddrSenFull = 256 * (EEPROM.read(ADDR_USER_BASE+2) & 0x0F) + 2 * EEPROM.read(ADDR_USER_BASE + 1) +
                            (EEPROM.read(ADDR_USER_BASE+2) >> 5) + 1;
 
-           ucAddrHiSen = (uiAddrSenFull >> 7) & 0x7F;
-           ucAddrLoSen = uiAddrSenFull & 0x7F;
+          calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
+           
            setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
 #if _SERIAL_DEBUG
     if(bSerialOk){
@@ -363,6 +383,127 @@ void loop() {
         } //if(msgLen == 0x10)
       }//if( ((recMessage[2]
    } //if(recLen)
+
+   // Check if a web-client has connected
+   WiFiClient webClient = server.available();
+
+   //if the client has some data
+   if(webClient.available()){
+      // Read the first line of the request
+      String req = webClient.readStringUntil('\r');
+      if(bSerialOk){
+         Serial.println(req);
+      }
+      webClient.flush();
+
+      int ipRecIdx = req.indexOf("1=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+2);
+          myIp[0] = ipRead.toInt();
+      }
+
+      ipRecIdx = req.indexOf("2=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+2);
+          myIp[1] = ipRead.toInt();
+      }
+
+      ipRecIdx = req.indexOf("3=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+2);
+          myIp[2] = ipRead.toInt();
+      }
+
+      ipRecIdx = req.indexOf("4=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+2);
+          myIp[3] = ipRead.toInt();
+      }
+
+      ipRecIdx = req.indexOf("BA=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+3);
+          ucBoardAddrLo = ipRead.toInt();
+          EEPROM.write(ADDR_NODE_ID_L, ucBoardAddrLo);
+          EEPROM.commit();
+      }
+
+      ipRecIdx = req.indexOf("SA=");
+      if(ipRecIdx != -1){
+          String ipRead = req.substring(ipRecIdx+3);
+          uiAddrSenFull = ipRead.toInt();
+
+          calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
+#if _SERIAL_DEBUG
+    if(bSerialOk){
+          Serial.print("Full: ");
+          Serial.println(uiAddrSenFull);
+
+          Serial.print("low ");
+          Serial.println(ucAddrLoSen);
+
+          Serial.print("high ");
+          Serial.println(ucAddrHiSen);
+#endif
+          EEPROM.write(ADDR_USER_BASE+2, ucAddrHiSen);
+          EEPROM.write(ADDR_USER_BASE+1, ucAddrLoSen);
+ 
+          EEPROM.commit();
+      }
+
+      
+      fIndexHtml = SPIFFS.open("/index.html", "r");
+      if (!fIndexHtml) {
+         if(bSerialOk){
+            Serial.println("file open failed");
+         }
+      }
+
+      //read the full file
+      String s=fIndexHtml.readStringUntil(EOF);
+      fIndexHtml.close();
+      
+      int ipIdx = s.indexOf("function");
+
+      String htmlBegin = s.substring(0, ipIdx);
+      String htmlEnd = s.substring(ipIdx);
+      String sBoardAddrLo = String(ucBoardAddrLo);
+      String sBoardAddrHi = String(ucBoardAddrHi);
+
+      String htmlFull = "";
+      
+      htmlFull = htmlBegin + "var boardIp1 = ";
+      htmlFull +=  String(myIp[0]);
+      htmlFull += "; \n";
+      htmlFull += "var boardIp2 = ";
+      htmlFull +=  String(myIp[1]);
+      htmlFull += "; \n";
+      htmlFull += "var boardIp3 = ";
+      htmlFull +=  String(myIp[2]);
+      htmlFull += "; \n";
+      htmlFull += "var boardIp4 = ";
+      htmlFull +=  String(myIp[3]);
+      htmlFull += "; \n ";
+      htmlFull += "var boardAddr = ";
+      htmlFull +=  String(sBoardAddrLo);
+      htmlFull += "; \n ";
+      htmlFull += "var senAddr = ";
+      htmlFull +=  String(uiAddrSenFull);
+      htmlFull += "; \n\n ";
+      htmlFull += htmlEnd;
+
+#if 0
+      if(bSerialOk){
+         Serial.println(htmlFull);
+      }
+#endif
+      // Send the response to the client
+      webClient.print(htmlFull);
+
+      if(bSerialOk){
+         Serial.println("Client disonnected");
+      }
+   }
 }
 
 /**
@@ -529,6 +670,12 @@ void copyUid (byte *buffIn, byte *buffOut, byte bufferSize) {
            buffOut[i] = 0;
        }    
     }
+}
+
+void calcAddrBytes(uint16_t uiFull, uint8_t *uiLo, uint8_t *uiHi){
+    uint8_t uiTemp;
+    *uiHi = (uiFull >> 8) + (((uiFull-1) & 3) << 5);
+    *uiLo = ((uiFull - 1) & 0xFE) / 2;  
 }
 
 

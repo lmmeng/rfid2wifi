@@ -1,12 +1,69 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>Page Title</title>
+<title>RFID2WIFI Configuration</title>
 </head>
-<body>
+<body onload="getAll()" >
 
-<h1>My First Heading</h1>
-<p>My first paragraph.</p>
+ <h1>RFID2WIFI Configuration</h1>
+
+  <p>
+   <form id="ipSetForm" methode="POST" onload="getIp()">
+     IP: <input id="ipFormIn1" type="text" name="IP1" size="3"> </input>
+     <input id="ipFormIn2" type="text" name="IP2" size="3"> </input>
+     <input id="ipFormIn3" type="text" name="IP3" size="3"> </input>
+     <input id="ipFormIn4" type="text" name="IP4" size="3"> </input><br>
+     <input type="submit" value="SetIP" onclick="setIp()"></input>
+   </form>
+   <form id="boardAddrSetForm" methode="POST" onload="getBa()">
+     BA: <input id="baFormIn" type="text" name="BA" size="5"> </input><br>
+     <input type="submit" value="SetBoardAddr" onclick="setBa()"></input>
+   </form>
+   <form id="senAddrSetForm" methode="POST" onload="getSa()" >
+     SA: <input id="saFormIn" type="text" name="SA" size="5"> </input><br>
+     <input type="submit" value="SetSensorAdd" onclick="setSa()"></input>
+   </form>
+  </p>
+ 
+
+ <script>
+  
+    function setIp(){
+       boardIp1 = document.getElementById('ipFormIn1').value;
+       boardIp2 = document.getElementById('ipFormIn2').value;
+       boardIp3 = document.getElementById('ipFormIn3').value;
+       boardIp4 = document.getElementById('ipFormIn4').value;
+    }
+
+    function getIp(){
+       document.getElementById('ipFormIn1').value = boardIp1;
+       document.getElementById('ipFormIn2').value = boardIp2;
+       document.getElementById('ipFormIn3').value = boardIp3;
+       document.getElementById('ipFormIn4').value = boardIp4;
+    }
+
+    function setBa(){
+       boardAddr = document.getElementById('baFormIn').value;
+    }
+
+    function getBa(){
+       document.getElementById('baFormIn').value = boardAddr;
+    }
+
+    function setSa(){
+       senAddr = document.getElementById('saFormIn').value;
+    }
+
+    function getSa(){
+       document.getElementById('saFormIn').value = senAddr;
+    }
+    
+    function getAll(){
+       getIp();
+       getBa();
+       getSa();
+    }
+ </script>
 
 </body>
 </html> 
