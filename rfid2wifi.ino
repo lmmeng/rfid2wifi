@@ -368,7 +368,7 @@ void loop() {
            calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
            
            setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
-#if 1 //_SERIAL_DEBUG
+#if _SERIAL_DEBUG
     if(bSerialOk){
         // Show some details of the loconet setup
         Serial.print(F("Changed address. Full sen addr: "));
@@ -434,6 +434,8 @@ void loop() {
           uiAddrSenFull = ipRead.toInt();
 
           calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
+          setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
+
 #if _SERIAL_DEBUG
     if(bSerialOk){
           Serial.print("Full: ");
@@ -444,6 +446,7 @@ void loop() {
 
           Serial.print("high ");
           Serial.println(ucAddrHiSen);
+    }
 #endif
           EEPROM.write(ADDR_USER_BASE+2, ucAddrHiSen);
           EEPROM.write(ADDR_USER_BASE+1, ucAddrLoSen);
@@ -451,7 +454,6 @@ void loop() {
           EEPROM.commit();
       }
 
-      
       fIndexHtml = SPIFFS.open("/index.html", "r");
       if (!fIndexHtml) {
          if(bSerialOk){
