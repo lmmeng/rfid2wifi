@@ -184,7 +184,7 @@ void setup() {
 
     // Rocrail compatible addressing
     uiAddrSenFull = 256 * (EEPROM.read(ADDR_USER_BASE+2) & 0x0F) + 2 * EEPROM.read(ADDR_USER_BASE+1) +
-                    (EEPROM.read(ADDR_USER_BASE+2) >> 5) + 1;
+                    ((EEPROM.read(ADDR_USER_BASE+2) & 0x20) >> 5) + 1;
 
     calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
 
@@ -363,12 +363,12 @@ void loop() {
             
            // Rocrail compatible addressing
            uiAddrSenFull = 256 * (EEPROM.read(ADDR_USER_BASE+2) & 0x0F) + 2 * EEPROM.read(ADDR_USER_BASE + 1) +
-                           (EEPROM.read(ADDR_USER_BASE+2) >> 5) + 1;
-
-          calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
+                           ((EEPROM.read(ADDR_USER_BASE+2) & 0x20) >> 5) + 1;
+                           
+           calcAddrBytes(uiAddrSenFull, &ucAddrLoSen, &ucAddrHiSen);
            
            setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
-#if _SERIAL_DEBUG
+#if 1 //_SERIAL_DEBUG
     if(bSerialOk){
         // Show some details of the loconet setup
         Serial.print(F("Changed address. Full sen addr: "));
@@ -652,9 +652,9 @@ void setMessageHeader(uint8_t *SendPacketSensor){
     SendPacketSensor[0] = 0xE4; //OPC - variable length message 
     SendPacketSensor[1] = uiLnSendLength; //14 bytes length
     SendPacketSensor[2] = 0x41; //report type 
-    SendPacketSensor[3] = ucAddrHiSen; //sensor address high
-    SendPacketSensor[4] = ucAddrLoSen; //sensor address low 
-    
+    SendPacketSensor[3] = (uiAddrSenFull >> 7) & 0x7F; //ucAddrHiSen; //sensor address high
+    SendPacketSensor[4] = uiAddrSenFull & 0x7F;; //ucAddrLoSen; //sensor address low 
+   
     SendPacketSensor[uiLnSendCheckSumIdx]=0xFF;
     for(k=0; k<5;k++){
       SendPacketSensor[uiLnSendCheckSumIdx] ^= SendPacketSensor[k];
@@ -673,8 +673,7 @@ void copyUid (byte *buffIn, byte *buffOut, byte bufferSize) {
 }
 
 void calcAddrBytes(uint16_t uiFull, uint8_t *uiLo, uint8_t *uiHi){
-    uint8_t uiTemp;
-    *uiHi = (uiFull >> 8) + (((uiFull-1) & 3) << 5);
+    *uiHi = (((uiFull - 1)  >> 8) & 0x0F) + (((uiFull-1) & 1) << 5);
     *uiLo = ((uiFull - 1) & 0xFE) / 2;  
 }
 
