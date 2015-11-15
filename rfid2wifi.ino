@@ -127,7 +127,7 @@ uint8_t oldUid[UID_LEN] = {0};
 
 uint8_t SendPacketSensor[16];
 
-boolean bSerialOk=false;
+//boolean bSerialOk=false;
 
 #define _SERIAL_DEBUG  0
 
@@ -154,7 +154,8 @@ void setup() {
     } while ((!Serial) && (uiElapsedDelay < uiSerialOKDelay));    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
 
     if(Serial) { //serial interface ok
-       bSerialOk = true;
+       //bSerialOk = true;
+       Serial.setDebugOutput(true);
        //Show some details of the loconet setup
        Serial.println();
        Serial.println();
@@ -198,36 +199,24 @@ void setup() {
     for (byte i = 0; i < 6; i++) {
         key.keyByte[i] = 0xFF;
     }
-
   
-    WiFi.begin(ssid, password);
-  
-    if(bSerialOk){
-       Serial.println("");
-    }
+    WiFi.begin(ssid, password);  
+    Serial.println("");
     
     while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
-      if(bSerialOk){
-         Serial.print(".");
-      }
-   }//while
+       delay(500);
+       Serial.print(".");
+    }//while
    
-   if(bSerialOk){
-      Serial.println("");
-      Serial.println("WiFi connected");
-   }
+    Serial.println("");
+    Serial.println("WiFi connected");
 
-   // Print the IP address
-   if(bSerialOk){
-      Serial.println(WiFi.localIP());
-   }
+    // Print the IP address
+    Serial.println(WiFi.localIP());
 
-   // Start the server
-   server.begin();
-   if(bSerialOk){
-      Serial.println("Server started");
-   }
+    // Start the server
+    server.begin();
+    Serial.println("Server started");
 
     // start UDP server
     g_udp.begin(port);
@@ -235,22 +224,20 @@ void setup() {
     setMessageHeader(SendPacketSensor);
     uiStartChkSen = SendPacketSensor[uiLnSendCheckSumIdx];
 
-    if(bSerialOk){
-        // Show some details of the loconet setup
-        Serial.print(F("Board address: "));
-        Serial.print(ucBoardAddrHi);
-        Serial.print(F(" - "));
-        Serial.println(ucBoardAddrLo);
-        Serial.print(F("Full sensor addr: "));
-        Serial.println(uiAddrSenFull);
-        Serial.print(F("Sensor AddrH: "));
-        Serial.print(ucAddrHiSen);
-        Serial.print(F(" Sensor AddrL: "));
-        Serial.print(ucAddrLoSen);
-        Serial.println();
-        Serial.println(FPSTR(STARS));
-        Serial.println();
-    }
+    // Show some details of the loconet setup
+    Serial.print(F("Board address: "));
+    Serial.print(ucBoardAddrHi);
+    Serial.print(F(" - "));
+    Serial.println(ucBoardAddrLo);
+    Serial.print(F("Full sensor addr: "));
+    Serial.println(uiAddrSenFull);
+    Serial.print(F("Sensor AddrH: "));
+    Serial.print(ucAddrHiSen);
+    Serial.print(F(" Sensor AddrL: "));
+    Serial.print(ucAddrLoSen);
+    Serial.println();
+    Serial.println(FPSTR(STARS));
+    Serial.println();
 
     SPIFFS.begin();
 
@@ -274,12 +261,10 @@ void loop() {
   if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){
      if(!delaying){   //Avoid to many/to fast reads of the same tag
       
-        if(bSerialOk){
-           // Show some details of the PICC (that is: the tag/card)
-           Serial.print(F("Card UID:"));
-           dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
-           Serial.println();
-        }
+        // Show some details of the PICC (that is: the tag/card)
+        Serial.print(F("Card UID:"));
+        dump_byte_array(mfrc522.uid.uidByte, mfrc522.uid.size);
+        Serial.println();
 
         uiStartTime = millis();
         delaying = true;
@@ -302,12 +287,10 @@ void loop() {
         SendPacketSensor[uiLnSendCheckSumIdx] ^= SendPacketSensor[uiLnSendMsbIdx]; //calculate the checksumm
 
 #if _SER_DEBUG
-    if(bSerialOk){
         // Show some details of the PICC (that is: the tag/card)
         Serial.print(F("LN send mess:"));
         dump_byte_array(SendPacketSensor, uiLnSendLength);
         Serial.println();
-    } // if(bSerialOk){
 #endif
 
         g_udp.beginPacket(ipBroad, port);
@@ -345,12 +328,10 @@ void loop() {
         uint8_t sendMessage[16]; 
      
 #if _SERIAL_DEBUG
-    if(bSerialOk){
         Serial.print(F("LN rec mess:"));
         dump_byte_array(recMessage, recLen);
         Serial.println();
         Serial.println(recLen);
-    } //if(bSerial
 #endif        
         //Change the board & sensor addresses. Changing the board address is working
         if(msgLen == 0x10){  //XFERmessage, check if it is for me. Used to change the address
@@ -369,7 +350,6 @@ void loop() {
            
            setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
 #if _SERIAL_DEBUG
-    if(bSerialOk){
         // Show some details of the loconet setup
         Serial.print(F("Changed address. Full sen addr: "));
         Serial.print(uiAddrSenFull);
@@ -378,7 +358,6 @@ void loop() {
         Serial.print(F(" Sensor AddrL: "));
         Serial.print(ucAddrLoSen);
         Serial.println();
-    } //if(bSerial
 #endif
         } //if(msgLen == 0x10)
       }//if( ((recMessage[2]
@@ -391,9 +370,7 @@ void loop() {
    if(webClient.available()){
       // Read the first line of the request
       String req = webClient.readStringUntil('\r');
-      if(bSerialOk){
-         Serial.println(req);
-      }
+      Serial.println(req);
       webClient.flush();
 
       int ipRecIdx = req.indexOf("1=");
@@ -437,7 +414,6 @@ void loop() {
           setMessageHeader(SendPacketSensor); //if the sensor address was changed, update the header                
 
 #if _SERIAL_DEBUG
-    if(bSerialOk){
           Serial.print("Full: ");
           Serial.println(uiAddrSenFull);
 
@@ -446,7 +422,6 @@ void loop() {
 
           Serial.print("high ");
           Serial.println(ucAddrHiSen);
-    }
 #endif
           EEPROM.write(ADDR_USER_BASE+2, ucAddrHiSen);
           EEPROM.write(ADDR_USER_BASE+1, ucAddrLoSen);
@@ -456,9 +431,7 @@ void loop() {
 
       fIndexHtml = SPIFFS.open("/index.html", "r");
       if (!fIndexHtml) {
-         if(bSerialOk){
-            Serial.println("file open failed");
-         }
+         Serial.println("file open failed");
       }
 
       //read the full file
@@ -495,16 +468,12 @@ void loop() {
       htmlFull += htmlEnd;
 
 #if 0
-      if(bSerialOk){
-         Serial.println(htmlFull);
-      }
+      Serial.println(htmlFull);
 #endif
       // Send the response to the client
       webClient.print(htmlFull);
 
-      if(bSerialOk){
-         Serial.println("Client disonnected");
-      }
+      Serial.println("Client disonnected");
    }
 }
 
@@ -513,10 +482,8 @@ void loop() {
  */
 void dump_byte_array(byte *buffer, byte bufferSize) {
     for (byte i = 0; i < bufferSize; i++) {
-       if(bSerialOk){     
-          Serial.print(buffer[i] < 0x10 ? " 0" : " ");
-          Serial.print(buffer[i], HEX);
-       } //if(bSerial
+       Serial.print(buffer[i] < 0x10 ? " 0" : " ");
+       Serial.print(buffer[i], HEX);
     }
 }
 
