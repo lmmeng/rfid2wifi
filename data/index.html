@@ -13,15 +13,19 @@
      <input id="ipFormIn2" type="text" name="IP2" size="3"> </input>
      <input id="ipFormIn3" type="text" name="IP3" size="3"> </input>
      <input id="ipFormIn4" type="text" name="IP4" size="3"> </input><br>
-     <input type="submit" value="SetIP" onclick="setIp()"></input>
+     <input type="submit" value="Set Board IP" onclick="setIp()"></input>
    </form>
    <form id="boardAddrSetForm" methode="POST" onload="getBa()">
      BA: <input id="baFormIn" type="text" name="BA" size="5"> </input><br>
-     <input type="submit" value="SetBoardAddr" onclick="setBa()"></input>
+     <input type="submit" value="Set Board Address" onclick="setBa()"></input>
    </form>
-   <form id="senAddrSetForm" methode="POST" onload="getSa()" >
-     SA: <input id="saFormIn" type="text" name="SA" size="5"> </input><br>
-     <input type="submit" value="SetSensorAdd" onclick="setSa()"></input>
+   <form id="sen1AddrSetForm" methode="POST" onload="getSa1()" >
+     SA1: <input id="sa1FormIn" type="text" name="SA1" size="5"> </input><br>
+     <input type="submit" value="Set Sensor 1 Address" onclick="setSa1()"></input>
+   </form>
+   <form id="sen2AddrSetForm" methode="POST" onload="getSa2()" >
+     SA2: <input id="sa2FormIn" type="text" name="SA2" size="5"> </input><br>
+     <input type="submit" value="Set Sensor 2 Address" onclick="setSa2()"></input>
    </form>
   </p>
   <p>
@@ -55,18 +59,27 @@
        document.getElementById('baFormIn').value = boardAddr;
     }
 
-    function setSa(){
-       senAddr = document.getElementById('saFormIn').value;
+    function setSa1(){
+       senAddr1 = document.getElementById('sa1FormIn').value;
     }
 
-    function getSa(){
-       document.getElementById('saFormIn').value = senAddr;
+    function setSa2(){
+       senAddr2 = document.getElementById('sa2FormIn').value;
+    }
+
+    function getSa1(){
+       document.getElementById('sa1FormIn').value = senAddr1;
+    }
+    
+    function getSa2(){
+       document.getElementById('sa2FormIn').value = senAddr2;
     }
     
     function getAll(){
        getIp();
        getBa();
-       getSa();
+       getSa1();
+       getSa2();
     }
  </script>
 

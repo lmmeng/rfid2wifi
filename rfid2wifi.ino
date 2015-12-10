@@ -390,27 +390,27 @@ void loop() {
       Serial.println(req);
       webClient.flush();
 
-      int ipRecIdx = req.indexOf("1=");
+      int ipRecIdx = req.indexOf("IP1=");
       if(ipRecIdx != -1){
-          String ipRead = req.substring(ipRecIdx+2);
+          String ipRead = req.substring(ipRecIdx+4);
           myIp[0] = ipRead.toInt();
       }
 
-      ipRecIdx = req.indexOf("2=");
+      ipRecIdx = req.indexOf("IP2=");
       if(ipRecIdx != -1){
-          String ipRead = req.substring(ipRecIdx+2);
+          String ipRead = req.substring(ipRecIdx+4);
           myIp[1] = ipRead.toInt();
       }
 
-      ipRecIdx = req.indexOf("3=");
+      ipRecIdx = req.indexOf("IP3=");
       if(ipRecIdx != -1){
-          String ipRead = req.substring(ipRecIdx+2);
+          String ipRead = req.substring(ipRecIdx+4);
           myIp[2] = ipRead.toInt();
       }
 
-      ipRecIdx = req.indexOf("4=");
+      ipRecIdx = req.indexOf("IP4=");
       if(ipRecIdx != -1){
-          String ipRead = req.substring(ipRecIdx+2);
+          String ipRead = req.substring(ipRecIdx+4);
           myIp[3] = ipRead.toInt();
       }
 
@@ -422,26 +422,52 @@ void loop() {
           EEPROM.commit();
       }
 
-      ipRecIdx = req.indexOf("SA=");
+      ipRecIdx = req.indexOf("SA1=");
       if(ipRecIdx != -1){
-          String ipRead = req.substring(ipRecIdx+3);
-          uiAddrSenFull[0] = ipRead.toInt();
+          uint8_t port = 0;
+          String ipRead = req.substring(ipRecIdx+4);
+          uiAddrSenFull[port] = ipRead.toInt();
 
-          calcAddrBytes(uiAddrSenFull[0], &ucAddrLoSen[0], &ucAddrHiSen[0]);
-          setMessageHeader(SendPacketSensor, 0); //if the sensor address was changed, update the header                
+          calcAddrBytes(uiAddrSenFull[port], &ucAddrLoSen[port], &ucAddrHiSen[port]);
+          setMessageHeader(SendPacketSensor, port); //if the sensor address was changed, update the header                
 
 #if _SERIAL_DEBUG
           Serial.print("Full: ");
-          Serial.println(uiAddrSenFull);
+          Serial.println(uiAddrSenFull[port]);
 
           Serial.print("low ");
-          Serial.println(ucAddrLoSen);
+          Serial.println(ucAddrLoSen[port]);
 
           Serial.print("high ");
-          Serial.println(ucAddrHiSen);
+          Serial.println(ucAddrHiSen[port]);
 #endif
-          EEPROM.write(ADDR_USER_BASE+2, ucAddrHiSen[0]);
-          EEPROM.write(ADDR_USER_BASE+1, ucAddrLoSen[0]);
+          EEPROM.write(ADDR_USER_BASE+2, ucAddrHiSen[port]);
+          EEPROM.write(ADDR_USER_BASE+1, ucAddrLoSen[port]);
+ 
+          EEPROM.commit();
+      }
+
+      ipRecIdx = req.indexOf("SA2=");
+      if(ipRecIdx != -1){
+          uint8_t port = 1;
+          String ipRead = req.substring(ipRecIdx+4);
+          uiAddrSenFull[port] = ipRead.toInt();
+
+          calcAddrBytes(uiAddrSenFull[port], &ucAddrLoSen[port], &ucAddrHiSen[port]);
+          setMessageHeader(SendPacketSensor, port); //if the sensor address was changed, update the header                
+
+#if _SERIAL_DEBUG
+          Serial.print("Full: ");
+          Serial.println(uiAddrSenFull[port]);
+
+          Serial.print("low ");
+          Serial.println(ucAddrLoSen[port]);
+
+          Serial.print("high ");
+          Serial.println(ucAddrHiSen[port]);
+#endif
+          EEPROM.write(ADDR_USER_BASE+2+3, ucAddrHiSen[port]);
+          EEPROM.write(ADDR_USER_BASE+1+3, ucAddrLoSen[port]);
  
           EEPROM.commit();
       }
@@ -479,8 +505,11 @@ void loop() {
       htmlFull += "var boardAddr = ";
       htmlFull +=  String(sBoardAddrLo);
       htmlFull += "; \n ";
-      htmlFull += "var senAddr = ";
+      htmlFull += "var senAddr1 = ";
       htmlFull +=  String(uiAddrSenFull[0]);
+      htmlFull += "; \n ";
+      htmlFull += "var senAddr2 = ";
+      htmlFull +=  String(uiAddrSenFull[1]);
       htmlFull += "; \n\n ";
       htmlFull += htmlEnd;
 
