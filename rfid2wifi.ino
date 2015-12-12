@@ -205,7 +205,7 @@ void setup() {
     }
 
     SPI.begin();        // Init SPI bus
-    for(uint8_t port=0; port < 1 /*NR_OF_PORTS*/; port++){
+    for(uint8_t port=0; port < NR_OF_PORTS; port++){
        mfrc522[port].PCD_Init(ssPins[port], RST_PIN); // Init MFRC522 card
     }
 
