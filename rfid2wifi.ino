@@ -10,9 +10,6 @@
  * This sample shows how to read and write data blocks on a MIFARE Classic PICC
  * (= card/tag).
  * 
- * BEWARE: Data will be written to the PICC, in sector #1 (blocks #4 to #7).
- * 
- * 
  * Typical pin layout used:
  * -----------------------------------------------------------------------------------------
  *             MFRC522      ESP866
@@ -35,24 +32,11 @@
 #include "secrets.h"
 #include "FS.h"
 
-const char* ssid = SSID_RR;  //update the secrets.h file
-const char* password = PASS_RR; //update the secrets.h file
-
-IPAddress ipBroad(224,0,0,1); 
-const int ipPort = 1235;
-const char STARS[] PROGMEM = "***************************************************************************";
-
-// Create an instance of the server
-// specify the port to listen on as an argument
-//WiFiServer server(port);
-WiFiUDP g_udp;
-
-
-#if defined(ARDUINO_ESP8266_ESP01)
+//#if defined(ARDUINO_ESP8266_ESP01)
   #define RST_PIN         4           // Configurable, see typical pin layout above
   #define SS_1_PIN        5           // Configurable, see typical pin layout above
   #define SS_2_PIN        2
-#endif
+//#endif
 
     // --------------------------------------------------------
     // OPC_PEER_XFER CMD's
@@ -98,9 +82,36 @@ WiFiUDP g_udp;
 #define BOARD_ADDR_HI   1
 
 #define NR_OF_PORTS     2
+
 #define NR_OF_SVS       NR_OF_PORTS * 3 + 3
 #define UID_LEN         7
 #define NR_OF_EXT_SVS   100 + NR_OF_PORTS * 3
+
+bool compareUid(uint8_t *buffer1, uint8_t *buffer2, uint8_t bufferSize);
+void copyUid(uint8_t *buffIn, uint8_t *buffOut, uint8_t bufferSize);
+void setMessageHeader(uint8_t *SendPacketSensor, uint8_t port);
+uint8_t processXferMess(uint8_t *LnRecMsg, uint8_t *LnSendMsg);
+uint8_t lnCalcCheckSumm(uint8_t *cMessage, uint8_t cMesLen);
+
+const char* ssid = SSID_RR;  //update the secrets.h file
+const char* password = PASS_RR; //update the secrets.h file
+
+IPAddress ipBroad(224,0,0,1); 
+IPAddress ipRR(192,168,1,30);
+IPAddress fixIp(192,168,1,199);
+
+ 
+IPAddress myIp;
+
+const int ipPort = 1235;
+const char STARS[] PROGMEM = "***************************************************************************";
+
+// Create an instance of the server
+// specify the port to listen on as an argument
+//WiFiServer server(port);
+WiFiUDP g_udp;
+
+
 
 byte ssPins[] = {SS_1_PIN, SS_2_PIN};
 MFRC522 mfrc522[NR_OF_PORTS]; //mfrc522(SS_PIN, RST_PIN);   // Create MFRC522 instance.
@@ -113,12 +124,6 @@ uint8_t ucAddrLoSen[NR_OF_PORTS];    //sensor address low
 uint8_t ucSenType[NR_OF_PORTS] = {0x0F}; //input
 uint16_t uiAddrSenFull[NR_OF_PORTS];
 
-
-bool compareUid(byte *buffer1, byte *buffer2, byte bufferSize);
-void copyUid(byte *buffIn, byte *buffOut, byte bufferSize);
-void setMessageHeader(uint8_t *SendPacketSensor, uint8_t port);
-uint8_t processXferMess(uint8_t *LnRecMsg, uint8_t *LnSendMsg);
-uint8_t lnCalcCheckSumm(uint8_t *cMessage, uint8_t cMesLen);
 uint8_t uiLnSendCheckSumIdx = 13; //last byte is CHK_SUMM
 uint8_t uiLnSendLength = 14; //14 bytes
 uint8_t uiLnSendMsbIdx = 12;
@@ -136,8 +141,6 @@ WiFiServer server(80);
 
 File fIndexHtml;
 File fIp;
-
-IPAddress myIp;
 
 /**
  * Initialize.
@@ -209,12 +212,28 @@ void setup() {
        mfrc522[port].PCD_Init(ssPins[port], RST_PIN); // Init MFRC522 card
     }
 
+    WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);  
-    Serial.println("");
+
+#if 0
+    IPAddress fixIp(192,168,1,199);
+    IPAddress fixGw(192,168,1,2);
+    IPAddress fixSn(255,255,255,0);
+    WiFi.config(fixIp, fixGw, fixSn);
+#endif
     
+    Serial.println("");
+
+    uint8_t delCnt = 0;
     while (WiFi.status() != WL_CONNECTED) {
        delay(500);
+       delCnt++;
        Serial.print(".");
+       if(delCnt == 80){
+          Serial.println();
+          delCnt = 0;
+       }
+       
     }//while
    
     Serial.println("");
@@ -260,17 +279,27 @@ void setup() {
 /**
  * Main loop.
  */
-void loop() {
+
   unsigned long uiStartTime;
   unsigned long uiActTime;
-  bool delaying;
+  static bool delaying;
   unsigned char i=0;
   unsigned char j=0;  
-  uint16_t uiDelayTime = 1000;
+  uint16_t uiDelayTime = 500;
+
+void loop() {
+
+  // if connection is lost, restart the udp server at reconnect
+  if(WiFi.status() == WL_CONNECTED) {
+    if(!g_udp) { 
+        g_udp.begin(ipPort);
+    }
+  } 
 
     // Look for new cards
   for(uint8_t port=0; port < NR_OF_PORTS; port++){
     if ( mfrc522[port].PICC_IsNewCardPresent() && mfrc522[port].PICC_ReadCardSerial()){
+
        if(!delaying){   //Avoid to many/to fast reads of the same tag
       
           // Show some details of the PICC (that is: the tag/card)
@@ -306,31 +335,35 @@ void loop() {
           dump_byte_array(SendPacketSensor, uiLnSendLength);
           Serial.println();
 #endif
-
-          g_udp.beginPacket(ipBroad, ipPort);
+//          g_udp.beginPacket(ipBroad, ipPort);
+          g_udp.beginPacket(ipRR, ipPort);
           g_udp.write(SendPacketSensor, uiLnSendLength);
           g_udp.endPacket();
 
           copyUid(mfrc522[port].uid.uidByte, oldUid[port], mfrc522[port].uid.size);
-        
        } else { //if(!delaying)
           uiActTime = millis();  
+          delaying = false;
           if(compareUid( mfrc522[port].uid.uidByte, oldUid[port], mfrc522[port].uid.size)){//same UID  
-             if((uiActTime - uiStartTime) > uiDelayTime){
-                delaying = false;
+             if((uiActTime - uiStartTime) < uiDelayTime){
+                delaying = true;
              } //if((uiActTime
-          } else { //new UID
-             delaying = false;
-          }
+          } //if(compareUid
        } //else 
      
        // Halt PICC
-       mfrc522[port].PICC_HaltA();
+//       mfrc522[port].PICC_HaltA();
        // Stop encryption on PCD
-       mfrc522[port].PCD_StopCrypto1();
+//       mfrc522[port].PCD_StopCrypto1();
     } //if ( mfrc522[port].PICC_IsNewCardPresent() && mfrc522[port].PICC_ReadCardSerial())
-  } //for(uint8_t port...   
-
+  } //for(uint8_t port...  
+   
+  if(WiFi.status() == WL_CONNECTED) {
+    if(!g_udp) { 
+        g_udp.begin(ipPort);
+    }
+  }
+  
   // Check if a rocrail client has connected
   uint8_t recLen = g_udp.parsePacket();
   uint8_t recMessage[16]; 
@@ -338,9 +371,6 @@ void loop() {
   if(recLen){
      g_udp.read(recMessage, recLen);
      g_udp.flush();
-     if( ((recMessage[2] != ucBoardAddrLo) || (recMessage[4] != ucBoardAddrHi))) { //new message sent by other
-        uint8_t msgLen = recMessage[1];
-        uint8_t sendMessage[16]; 
      
 #if _SERIAL_DEBUG
         Serial.print(F("LN rec mess:"));
@@ -348,15 +378,27 @@ void loop() {
         Serial.println();
         Serial.println(recLen);
 #endif        
-        //Change the board & sensor addresses. Changing the board address is working
-        if(msgLen == 0x10){  //XFERmessage, check if it is for me. Used to change the address
+    //Change the board & sensor addresses. Changing the board address is working
+    if(recLen == 0x10){  //XFERmessage, check if it is for me. Used to change the addresses
+      uint8_t sendMessage[16]; 
+      
+      if((recMessage[3] == ucBoardAddrLo) || (recMessage[3] == 0)){ //my low address or query
+        if((recMessage[4] == ucBoardAddrHi) || (recMessage[4] == 0x7F)){ ////my high address or query
            //svStatus = sv.processMessage(LnPacket);
          
            processXferMess(recMessage, sendMessage);
-           g_udp.beginPacket(ipBroad, ipPort);
-           g_udp.write(sendMessage, msgLen);
+
+//           g_udp.beginPacket(ipBroad, ipPort);
+           g_udp.beginPacket(ipRR, ipPort);
+           g_udp.write(sendMessage, recLen);
            g_udp.endPacket();
             
+#if _SER_DEBUG
+           // Show some details of the PICC (that is: the tag/card)
+           Serial.print(F("LN send prog. mess:"));
+           dump_byte_array(sendMessage, msgLen);
+           Serial.println();
+#endif
            // Rocrail compatible addressing
            for(uint8_t port=0; port < NR_OF_PORTS; port++){
               uiAddrSenFull[port] = 256 * (EEPROM.read(ADDR_USER_BASE + 2 + port*3) & 0x0F) + 
@@ -367,17 +409,24 @@ void loop() {
            }
            
 #if _SERIAL_DEBUG
-        // Show some details of the loconet setup
-        Serial.print(F("Changed address. Full sen addr: "));
-        Serial.print(uiAddrSenFull);
-        Serial.print(F(" Sensor AddrH: "));
-        Serial.print(ucAddrHiSen);
-        Serial.print(F(" Sensor AddrL: "));
-        Serial.print(ucAddrLoSen);
-        Serial.println();
+           // Show some details of the loconet setup
+           Serial.print(F("Changed address. Full sen addr: "));
+           Serial.print(uiAddrSenFull[0]);
+           Serial.print(F(" Sensor AddrH: "));
+           Serial.print(ucAddrHiSen[0]);
+           Serial.print(F(" Sensor AddrL: "));
+           Serial.print(ucAddrLoSen[0]);
+           Serial.println();
+           Serial.print(uiAddrSenFull[1]);
+           Serial.print(F(" Sensor AddrH: "));
+           Serial.print(ucAddrHiSen[1]);
+           Serial.print(F(" Sensor AddrL: "));
+           Serial.print(ucAddrLoSen[1]);
+           Serial.println();
 #endif
-        } //if(msgLen == 0x10)
-      }//if( ((recMessage[2]
+         } //if( ((recMessage[4]
+       } //if( ((recMessage[3]
+      }//if(msgLen == 0x10)
    } //if(recLen)
 
    // Check if a web-client has connected
@@ -513,9 +562,6 @@ void loop() {
       htmlFull += "; \n\n ";
       htmlFull += htmlEnd;
 
-#if 0
-      Serial.println(htmlFull);
-#endif
       // Send the response to the client
       webClient.print(htmlFull);
 
@@ -523,10 +569,14 @@ void loop() {
    }
 }
 
+/*****************************************************************
+** Functii
+*****************************************************************/
+
 /**
  * Helper routine to dump a byte array as hex values to Serial.
  */
-void dump_byte_array(byte *buffer, byte bufferSize) {
+void dump_byte_array(uint8_t *buffer, uint8_t bufferSize) {
     for (byte i = 0; i < bufferSize; i++) {
        Serial.print(buffer[i] < 0x10 ? " 0" : " ");
        Serial.print(buffer[i], HEX);
@@ -536,12 +586,13 @@ void dump_byte_array(byte *buffer, byte bufferSize) {
 /**
  * Function used to compare two RFID UIDs
  */
-bool compareUid(byte *buffer1, byte *buffer2, byte bufferSize) {
-    bool retVal = true;
-    for (byte i = 0; i < bufferSize, retVal; i++) {
-        retVal = (buffer1[i] == buffer2[i]);
+bool compareUid(uint8_t *buffer1, uint8_t *buffer2, uint8_t bufferSize) {
+    for (byte i = 0; i < bufferSize; i++) {
+        if(buffer1[i] != buffer2[i]){
+          return false;
+        }
     }
-  return retVal;
+  return true;
 }
 
 uint8_t processXferMess(uint8_t LnRecMsg[16], uint8_t cOutBuf[16]){
@@ -687,12 +738,12 @@ void setMessageHeader(uint8_t *SendPacketSensor, uint8_t port){
     }
 }
 
-void copyUid (byte *buffIn, byte *buffOut, byte bufferSize) {
-    for (byte i = 0; i < bufferSize; i++) {
+void copyUid (uint8_t *buffIn, uint8_t *buffOut, uint8_t bufferSize) {
+    for (uint8_t i = 0; i < bufferSize; i++) {
         buffOut[i] = buffIn[i];
     }
     if(bufferSize < UID_LEN){
-       for (byte i = bufferSize; i < UID_LEN; i++) {
+       for (uint8_t i = bufferSize; i < UID_LEN; i++) {
            buffOut[i] = 0;
        }    
     }
@@ -703,4 +754,6 @@ void calcAddrBytes(uint16_t uiFull, uint8_t *uiLo, uint8_t *uiHi){
     *uiLo = ((uiFull - 1) & 0xFE) / 2;  
 }
 
+
+ 
 
