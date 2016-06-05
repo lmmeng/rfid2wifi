@@ -39,6 +39,7 @@ const char* ssid = SSID_RR;  //update the secrets.h file
 const char* password = PASS_RR; //update the secrets.h file
 
 IPAddress ipBroad(224,0,0,1); 
+IPAddress ipServer(192,168,1,23); 
 const int port = 1235;
 const char STARS[] PROGMEM = "***************************************************************************";
 
@@ -48,10 +49,10 @@ const char STARS[] PROGMEM = "**************************************************
 WiFiUDP g_udp;
 
 
-#if defined(ARDUINO_ESP8266_ESP01)
+//#if defined(ARDUINO_ESP8266_ESP01)
   #define RST_PIN         4           // Configurable, see typical pin layout above
   #define SS_PIN          5           // Configurable, see typical pin layout above
-#endif
+//#endif
 
     // --------------------------------------------------------
     // OPC_PEER_XFER CMD's
@@ -129,7 +130,7 @@ uint8_t SendPacketSensor[16];
 
 //boolean bSerialOk=false;
 
-#define _SERIAL_DEBUG  0
+#define _SERIAL_DEBUG  1
 
 WiFiServer server(80);
 
@@ -137,6 +138,7 @@ File fIndexHtml;
 File fIp;
 
 IPAddress myIp;
+boolean bReaderActive = false;
 
 /**
  * Initialize.
@@ -193,12 +195,19 @@ void setup() {
 
     SPI.begin();        // Init SPI bus
     mfrc522.PCD_Init(); // Init MFRC522 card
+    byte readReg = mfrc522.PCD_ReadRegister(mfrc522.VersionReg);
+    if((readReg == 0x00) || (readReg == 0xFF)){ //missing reader
+      Serial.println("Reader absent");
+    } else {
+      Serial.println("Reader present");
+      bReaderActive = true;
+    }
 
     // Prepare the key (used both as key A and as key B)
     // using FFFFFFFFFFFFh which is the default at chip delivery from the factory
-    for (byte i = 0; i < 6; i++) {
-        key.keyByte[i] = 0xFF;
-    }
+//    for (byte i = 0; i < 6; i++) {
+//        key.keyByte[i] = 0xFF;
+//    }
   
     WiFi.begin(ssid, password);  
     Serial.println("");
@@ -246,10 +255,6 @@ void setup() {
 
 //#############################################################
 
-/**
- * Main loop.
- */
-void loop() {
   unsigned long uiStartTime;
   unsigned long uiActTime;
   bool delaying;
@@ -257,8 +262,20 @@ void loop() {
   unsigned char j=0;  
   uint16_t uiDelayTime = 1000;
 
+/**
+ * Main loop.
+ */
+void loop() {
+
+  // if connection is lost, restart the udp server at reconnect
+  if(WiFi.status() == WL_CONNECTED) {
+    if(!g_udp) { 
+        g_udp.begin(port);
+    }
+  } 
     // Look for new cards
-  if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){
+  if(bReaderActive){
+   if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){
      if(!delaying){   //Avoid to many/to fast reads of the same tag
       
         // Show some details of the PICC (that is: the tag/card)
@@ -286,7 +303,7 @@ void loop() {
 
         SendPacketSensor[uiLnSendCheckSumIdx] ^= SendPacketSensor[uiLnSendMsbIdx]; //calculate the checksumm
 
-#if _SER_DEBUG
+#if 1 //_SER_DEBUG
         // Show some details of the PICC (that is: the tag/card)
         Serial.print(F("LN send mess:"));
         dump_byte_array(SendPacketSensor, uiLnSendLength);
@@ -294,6 +311,7 @@ void loop() {
 #endif
 
         g_udp.beginPacket(ipBroad, port);
+//        g_udp.beginPacket(ipServer, port);
         g_udp.write(SendPacketSensor, uiLnSendLength);
         g_udp.endPacket();
 
@@ -301,45 +319,54 @@ void loop() {
         
      } else { //if(!delaying)
          uiActTime = millis();  
+         delaying = false;
          if(compareUid( mfrc522.uid.uidByte, oldUid, mfrc522.uid.size)){//same UID  
-            if((uiActTime - uiStartTime) > uiDelayTime){
-               delaying = false;
-            } //if((uiActTime
-         } else { //new UID
-            delaying = false;
+            if((uiActTime - uiStartTime) < uiDelayTime){
+               delaying = true;
+           } //if((uiActTime
          }
      } //else 
      
     // Halt PICC
-    mfrc522.PICC_HaltA();
+    //   mfrc522.PICC_HaltA();
     // Stop encryption on PCD
-    mfrc522.PCD_StopCrypto1();
-  } //if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){    
-
+    //   mfrc522.PCD_StopCrypto1();
+    } //if ( mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()){    
+  } //if(bReaderActive)
+  
   // Check if a rocrail client has connected
   uint8_t recLen = g_udp.parsePacket();
   uint8_t recMessage[16]; 
   
   if(recLen){
+    
      g_udp.read(recMessage, recLen);
      g_udp.flush();
-     if( ((recMessage[2] != ucBoardAddrLo) || (recMessage[4] != ucBoardAddrHi))) { //new message sent by other
-        uint8_t msgLen = recMessage[1];
+     
+    if(recLen == 0x10){  //XFERmessage, check if it is for me. Used to change the addresses
+      if((recMessage[3] == ucBoardAddrLo) || (recMessage[3] == 0)){ //my low address or query
+        if((recMessage[4] == ucBoardAddrHi) || (recMessage[4] == 0x7F)){ ////my high address or query
+                
         uint8_t sendMessage[16]; 
      
 #if _SERIAL_DEBUG
-        Serial.print(F("LN rec mess:"));
+        Serial.print(F("LN xfer rec mess:"));
         dump_byte_array(recMessage, recLen);
         Serial.println();
         Serial.println(recLen);
 #endif        
-        //Change the board & sensor addresses. Changing the board address is working
-        if(msgLen == 0x10){  //XFERmessage, check if it is for me. Used to change the address
-           //svStatus = sv.processMessage(LnPacket);
          
            processXferMess(recMessage, sendMessage);
+
+#if _SERIAL_DEBUG
+        Serial.print(F("LN xfer send mess:"));
+        dump_byte_array(sendMessage, recLen);
+        Serial.println();
+#endif        
+
            g_udp.beginPacket(ipBroad, port);
-           g_udp.write(sendMessage, msgLen);
+//           g_udp.beginPacket(ipServer, port);
+           g_udp.write(sendMessage, 16);
            g_udp.endPacket();
             
            // Rocrail compatible addressing
@@ -361,6 +388,7 @@ void loop() {
 #endif
         } //if(msgLen == 0x10)
       }//if( ((recMessage[2]
+    }
    } //if(recLen)
 
    // Check if a web-client has connected
@@ -646,4 +674,15 @@ void calcAddrBytes(uint16_t uiFull, uint8_t *uiLo, uint8_t *uiHi){
     *uiLo = ((uiFull - 1) & 0xFE) / 2;  
 }
 
+/**
+ * Function used to compare two RFID UIDs
+ */
+bool compareUid(byte *buffer1, byte *buffer2, byte bufferSize) {
+    for (byte i = 0; i < bufferSize; i++) {
+       if(buffer1[i] != buffer2[i]){
+         return(false);
+       }
+    }
+  return(true);
+}
 
