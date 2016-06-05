@@ -1,5 +1,7 @@
 <h1><a id="user-content-rfid2wifi" class="anchor" href="#rfid2wifi" aria-hidden="true"><span class="octicon octicon-link"></span></a>RFID to WiFi interface</h1>
 
+<h3> It seems the sketches in this repository don't work as expected and need to be fixed. Use them only as starting point for further development!! </h3>
+
 Combining the ESP8266-7 board and MFRC522 (https://github.com/miguelbalboa/rfid) project to create a RFID to WiFi interface for the rolling stock localisation in model railroad control programs (main target is Rocrail - www.rocrail.net, as this is the program I'm using).
 
 Requirements: 
